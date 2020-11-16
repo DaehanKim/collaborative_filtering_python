@@ -16,8 +16,11 @@ class CF:
 		verbose = False):
 		'''
 		This implements CF method based on `https://www.geeksforgeeks.org/user-based-collaborative-filtering/?ref=rp`
+		Params : 
+		  sim_metric (str) : must be one of "pearsonR", "pearsonR+"
 		'''
 		self.sim_metric = sim_metric
+		assert sim_metric in ['pearsonR','pearsonR+'], "sim_metric must be in 'pearsonR' or 'pearsonR+'"
 		self.method = method
 		self.verbose = verbose
 		self.num_neighbors = num_neighbors
@@ -81,6 +84,8 @@ class CF:
 					j_scores.append(self.score_dict_in_id[f"{j}_{common_item}"])
 					try : 
 						sim, p_val = stats.pearsonr(i_scores, j_scores)
+						if self.sim_metric == "pearsonR+":
+							sim = max(0, sim)
 						if p_val < 0.1 : 
 							self.sim_dict[i][j] = sim
 							self.sim_dict[j][i] = sim
@@ -115,12 +120,9 @@ class CF:
 			pred += self.score_dict_in_id[f"{neighbor_user_id}_{item_id}"] * sim_score
 			sim_sum += abs(sim_score)
 			num_neighbor += 1
-			# print(f"{user_id}-{neighbor_user_id} --> {sim_score}")
-		if sim_sum != 0:
-			pred /= sim_sum
-		# print(f"{sim_sum}, {pred}")
-		# exit()
-		pred += self.user_mean_score[user_id]
+		# user's rating average has impact of 1 to the weighted average
+		pred += self.user_mean_score[user_id]*1 
+		pred /= (sim_sum+1)		
 
 		return pred
 
@@ -156,7 +158,10 @@ if __name__ == "__main__":
 			if np.random.randn()<0 : continue
 			random_score_dict[f"{user}_{item}"] = round(np.random.uniform()*5,2)
 
-	model = CF(user_list = random_user , item_list = random_item, score_dict = random_score_dict)
+	model = CF(user_list = random_user, 
+	item_list = random_item, 
+	score_dict = random_score_dict,
+	sim_metric = "pearsonR+")
 
 	predicted, error = model.complete()
 	print(predicted)

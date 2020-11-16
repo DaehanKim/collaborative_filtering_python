@@ -161,7 +161,7 @@ if __name__ == "__main__":
 	model = CF(user_list = random_user, 
 	item_list = random_item, 
 	score_dict = random_score_dict,
-	sim_metric = "pearsonR+")
+	sim_metric = "pearsonR")
 
 	predicted, error = model.complete()
 	print(predicted)

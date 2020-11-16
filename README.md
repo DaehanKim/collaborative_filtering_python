@@ -8,7 +8,9 @@ This repository implements various matrix completion methods.
      - significance level is measured by p-value assuming normal distributions of both users ' scores.
      - If p-value is larger than 0.1, computed similarity is regarded as invalid and assign 0.0 as a similarity.
      - If a score matrix(dictionary) is sparse, this algorithm results in just assigning average score of a user's ratings as a predicted rating. 
-   - Predicted ratings can be out of original rating range.
+   - similarity measures currently supported are 'pearsonR' or 'pearsonR+'
+     - pearsonR : measures pearson correlation between user and neighbor's ratings of common items. Predicted ratings could be negative.
+     - pearsonR+ : uses pearsonR but disregards negative correlation(-1~0) and set it to zero in such cases. This ensures predicted ratings are positive.
 
   - SLIM algorithm
     - TBA

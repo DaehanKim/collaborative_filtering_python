@@ -120,10 +120,12 @@ class CF:
 			pred += self.score_dict_in_id[f"{neighbor_user_id}_{item_id}"] * sim_score
 			sim_sum += abs(sim_score)
 			num_neighbor += 1
-		# user's rating average has impact of 1 to the weighted average
-		pred += self.user_mean_score[user_id]*1 
-		pred /= (sim_sum+1)		
-
+		# user's rating average has the same impact as aggregated neighbors' on the weighted average
+		if sim_sum != 0 : 
+			pred /= sim_sum*2
+			pred += self.user_mean_score[user_id]*0.5
+		else : 
+			pred += self.user_mean_score[user_id] 
 		return pred
 
 
@@ -140,7 +142,7 @@ class CF:
 			try : 
 				self._pred_scores[_pair] = self._score_pair(*[int(item) for item in _pair.split('_')])
 			except : 
-				self._error[_pair] = sys.exc_info()[0]
+				_error[_pair] = sys.exc_info()[0]
 
 		named_pred_scores = {self._convert_pair2name(k) : v for k,v in self._pred_scores.items()}
 		return named_pred_scores, _error
@@ -161,8 +163,7 @@ if __name__ == "__main__":
 	model = CF(user_list = random_user, 
 	item_list = random_item, 
 	score_dict = random_score_dict,
-	sim_metric = "pearsonR")
+	sim_metric = "pearsonR+")
 
 	predicted, error = model.complete()
 	print(predicted)
-	print(model.user_mean_score)

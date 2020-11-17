@@ -20,30 +20,37 @@ This repository implements various matrix completion methods.
 #### Collaborative Filtering
 
 ```python
-random_user = list("ABCDEFGHIJ")
-# ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J']
-random_item = list("abcdefghij")
-# ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j']
-random_score_dict = {}
+random_user = list('abcdefghijklmnopqrstuvwxyz')
+print(random_user)
+# ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z']
+random_item = [str(i) for i in range(20)]
+print(random_item)
+# ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15', '16', '17', '18', '19']
 
-# Assign random ratings ranging from 0 to 5
+random_score_dict = {}
 for user in random_user :
-	for item in random_item :
-		if np.random.randn()<0 : continue
-		random_score_dict[f"{user}_{item}"] = round(np.random.uniform()*5,2)
-		
-model = CF(user_list = random_user, 
-	item_list = random_item, 
-	score_dict = random_score_dict)
+  for item in random_item :
+    # rating sparsity is 50%
+    if np.random.uniform()<0.5 : continue
+    # rating range is in [0,5]
+    random_score_dict[f"{user}_{item}"] = round(np.random.uniform()*5,2)
+
+model = CF(
+user_list = random_user, 
+item_list = random_item, 
+score_dict = random_score_dict,
+sim_metric = "pearsonR+",
+method="user_based",
+num_neighbors=5
+)
+
+predicted, error = model.complete_for(['a_{}'.format(i) for i in range(20)])
+# predict all ratings for user 'a'
+# {'a_0': 3.0374999999999996, 'a_7': 3.0374999999999996, 'a_8': 3.0374999999999996, 'a_10': 3.0374999999999996, 'a_11': 3.0837499999999998, 'a_12': 3.0374999999999996, 'a_13': 3.1137499999999996, 'a_14': 3.7937499999999997, 'a_15': 3.0374999999999996, 'a_16': 3.0374999999999996, 'a_17': 3.8387499999999997, 'a_18': 3.0374999999999996}
 
 predicted, error = model.complete()
-print(predicted)
-''' Prediction in terms of user_item pairs!
-{'A_a': 2.92, 'A_e': 1.3099999999999998, 'A_f': 2.92, 'A_g': 2.92, 'A_j': 2.92, 'B_a': 2.2616666666666667, 'B_b': -2.208333333333333, 'B_c': 2.2616666666666667, 'B_e': 0.6516666666666666, 'C_a': 3.524, 'C_c': -0.8360000000000003, 'C_f': -0.7060000000000004, 'C_g': 0.5640000000000001, 'C_j': 3.294, 'D_a': 2.4539999999999997, 'D_b': 2.4539999999999997, 'D_f': 2.4539999999999997, 'D_i': 2.4539999999999997, 'D_j': 2.4539999999999997, 'E_b': 3.686666666666667, 'E_c': 3.686666666666667, 'E_d': 3.686666666666667, 'E_e': 3.686666666666667, 'E_f': 3.686666666666667, 'E_g': 3.686666666666667, 'E_h': 3.686666666666667, 'F_c': 1.7625, 'F_g': 1.7625, 'G_b': 2.65, 'G_d': 2.65, 'G_i': 2.65, 'G_j': 2.65, 'H_a': 2.38, 'H_b': 2.38, 'H_c': 2.38, 'H_e': 2.38, 'H_g': 2.38, 'H_i': 2.38, 'I_a': 3.0933333333333337, 'I_b': 3.0933333333333337, 'I_d': 3.0933333333333337, 'I_i': 3.0933333333333337, 'J_b': 1.875, 'J_d': 1.875, 'J_e': 1.875, 'J_g': 1.875, 'J_i': 1.875, 'J_j': 1.875}'''
-print(error)
-''' Errors in terms of user_item pairs!
-{}
-'''
+# predict ratings for all non-evaluated pairs considering all users and items 
+# {'a_0': 1.789375, 'a_1': 1.589375, 'a_2': 2.391454950083955, 'a_4': 2.5843749999999996, 'a_5': 2.3582404453704133, ......}
 ```
 
 #### SLIM

@@ -1,9 +1,18 @@
+'''
+Author : DaehanKim
+'''
+
 import numpy as np
 from tqdm import tqdm
 import sys
 import math 
 from scipy import stats
 
+class ColdStartException(Exception): 
+	def __init__(self, value): 
+		self.value = value 
+	def __str__(self): 
+		return self.value
 
 class CF:
 	def __init__(self, 
@@ -20,10 +29,13 @@ class CF:
 		  sim_metric (str) : must be one of "pearsonR", "pearsonR+"
 		'''
 		self.sim_metric = sim_metric
-		assert sim_metric in ['pearsonR','pearsonR+'], "sim_metric must be in 'pearsonR' or 'pearsonR+'"
+		
 		self.method = method
 		self.verbose = verbose
 		self.num_neighbors = num_neighbors
+		assert sim_metric in ['pearsonR','pearsonR+'], "sim_metric must be in 'pearsonR' or 'pearsonR+'"
+		assert method in ['user_based'], "currently supporting 'user_based' only"
+		
 		self._init(user_list = user_list, 
 			item_list = item_list,
 			score_dict = score_dict)
@@ -46,10 +58,31 @@ class CF:
 		# get non-evaluated (user, item) pairs
 		self.non_eval_pairs = [f"{user_id}_{item_id}" for user_id in range(len(user_list)) for item_id in  range(len(item_list)) if f"{user_id}_{item_id}" not in self.score_dict_in_id]
 		
+		self._user_items = {}
+		for pair in self.score_dict_in_id:
+			user_id, item_id = [int(item) for item in pair.split('_')]
+			if user_id not in self._user_items : self._user_items[user_id] = []
+			self._user_items[user_id].append(item_id)
+		
 		self.user_mean_score = {}
-		for i in range(len(self.user_list)):
-			keys = [item for item in self.score_dict_in_id.keys() if item.split("_")[0] == str(i)]
+		for i, _ in enumerate(self.user_list):
+			if i not in self._user_items: 
+				continue
+			keys = [f"{i}_{v}" for v in self._user_items[i]]
 			self.user_mean_score[i] = None if not keys else np.array([self.score_dict_in_id[key] for key in keys]).mean()
+
+		# construct commonly rated items for each user-user pair
+		self._common_items = {}
+		for i, _ in tqdm(enumerate(self.user_list), desc="constructing common item dict", total=len(self.user_list)):
+			for j, _ in enumerate(self.user_list):
+				if i >= j : continue
+				if i not in self._user_items or j not in self._user_items : 
+					self._common_items[f"{i}_{j}"] = []
+					self._common_items[f"{j}_{i}"] = []
+					continue
+				self._common_items[f"{i}_{j}"] = [item for item in self._user_items[i] if item in self._user_items[j]]
+				self._common_items[f"{j}_{i}"] = self._common_items[f"{i}_{j}"] 
+
 
 	def _convert_pair2id(self,name_pair):
 		user,item = name_pair.split("_")
@@ -75,30 +108,27 @@ class CF:
 		for i, user_1 in tqdm(enumerate(self.user_list), desc="construct similarity matrix", total=len(self.user_list)):
 			for j, user_2 in enumerate(self.user_list):
 				if i >= j : continue
-				i_items = [(pair.split('_')[1], score) for pair, score in self.score_dict_in_id.items() if pair.split('_')[0] == str(i)]
-				j_items = [(pair.split('_')[1], score) for pair, score in self.score_dict_in_id.items() if pair.split('_')[0] == str(j)]
-
 				i_scores, j_scores = [], []
-				for common_item in set([pair[0] for pair in i_items]).intersection([pair[0] for pair in j_items]):
+				for common_item in self._common_items[f"{i}_{j}"]:
 					i_scores.append(self.score_dict_in_id[f"{i}_{common_item}"])
 					j_scores.append(self.score_dict_in_id[f"{j}_{common_item}"])
-					try : 
-						sim, p_val = stats.pearsonr(i_scores, j_scores)
-						if self.sim_metric == "pearsonR+":
-							sim = max(0, sim)
-						if p_val < 0.1 : 
-							self.sim_dict[i][j] = sim
-							self.sim_dict[j][i] = sim
-						else:
-							raise (ValueError, "{i} and {j} : too little samples!")
-					except ValueError:
-						if self.verbose : print(f'{i} and {j} : Less than 2 sample pairs to compute correlation!')
-						self.sim_dict[i][j] = 0 # assume no correlation
-						self.sim_dict[j][i] = 0
-					except : 
-						if self.verbose : print(f"Error in pearsonr : {sys.exc_info()[0]}")
-						self.sim_dict[i][j] = 0 # assume no correlation
-						self.sim_dict[j][i] = 0
+				try : 
+					sim, p_val = stats.pearsonr(i_scores, j_scores)
+					if self.sim_metric == "pearsonR+":
+						sim = max(0, sim)
+					if p_val < 0.1 : 
+						self.sim_dict[i][j] = sim
+						self.sim_dict[j][i] = sim
+					else:
+						raise ValueError("{i} and {j} : too little samples!")
+				except ValueError:
+					if self.verbose : print(f'{i} and {j} : Less than 2 sample pairs to compute correlation!')
+					self.sim_dict[i][j] = 0 # assume no correlation
+					self.sim_dict[j][i] = 0
+				except : 
+					if self.verbose : print(f"Error in pearsonr : {sys.exc_info()[0]}")
+					self.sim_dict[i][j] = 0 # assume no correlation
+					self.sim_dict[j][i] = 0
 
 					
 
@@ -121,11 +151,14 @@ class CF:
 			sim_sum += abs(sim_score)
 			num_neighbor += 1
 		# user's rating average has the same impact as aggregated neighbors' on the weighted average
-		if sim_sum != 0 : 
-			pred /= sim_sum*2
-			pred += self.user_mean_score[user_id]*0.5
-		else : 
-			pred += self.user_mean_score[user_id] 
+		try:
+			if sim_sum != 0 : 
+				pred /= sim_sum*2
+				pred += self.user_mean_score[user_id]*0.5
+			else : 
+				pred += self.user_mean_score[user_id]
+		except KeyError:
+			raise ColdStartException(f"No user rating record for item {item_id}!") 
 		return pred
 
 
@@ -135,10 +168,23 @@ class CF:
 		Params : 
 		Returns : 
 		'''
+		# predict ratings for all non evaluated pairs in (train+test)
+		non_eval_pairs_in_name = [self._convert_pair2name(k) for k in self.non_eval_pairs]
+		return self.complete_for(non_eval_pairs_in_name)
+
+	def complete_for(self, keys):
+		'''
+		Compute scores for non-evaluated pairs given a testing pool.
+		Params : 
+		  keys (list): this holds pairs of items to evaluate 
+		Returns : 
+		'''
 		self._compute_sim()
 		self._pred_scores = {}
 		_error ={}
-		for _pair in tqdm(self.non_eval_pairs, desc = "score unevaluted pairs"):
+		keys_in_id = [self._convert_pair2id(k) for k in keys]
+		for _pair in tqdm(keys_in_id, desc = "predict scores for pairs", total=len(keys_in_id)):
+			if _pair not in self.non_eval_pairs: continue 
 			try : 
 				self._pred_scores[_pair] = self._score_pair(*[int(item) for item in _pair.split('_')])
 			except : 
@@ -150,20 +196,34 @@ class CF:
 
 
 if __name__ == "__main__":
-	random_user = list("ABCDEFGHIJ")
+	random_user = list('abcdefghijklmnopqrstuvwxyz')
 	print(random_user)
-	random_item = list("abcdefghij")
+	# ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z']
+	random_item = [str(i) for i in range(20)]
 	print(random_item)
+	# ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15', '16', '17', '18', '19']
+
 	random_score_dict = {}
 	for user in random_user :
 		for item in random_item :
-			if np.random.randn()<0 : continue
+			# rating sparsity is 50%
+			if np.random.uniform()<0.5 : continue
+			# rating range is in [0,5]
 			random_score_dict[f"{user}_{item}"] = round(np.random.uniform()*5,2)
 
-	model = CF(user_list = random_user, 
+	model = CF(
+	user_list = random_user, 
 	item_list = random_item, 
 	score_dict = random_score_dict,
-	sim_metric = "pearsonR+")
+	sim_metric = "pearsonR+",
+	method="user_based",
+	num_neighbors=5
+	)
+
+	predicted, error = model.complete_for(['a_{}'.format(i) for i in range(20)])
+	# predict all ratings for user 'a'
+	# {'a_0': 3.0374999999999996, 'a_7': 3.0374999999999996, 'a_8': 3.0374999999999996, 'a_10': 3.0374999999999996, 'a_11': 3.0837499999999998, 'a_12': 3.0374999999999996, 'a_13': 3.1137499999999996, 'a_14': 3.7937499999999997, 'a_15': 3.0374999999999996, 'a_16': 3.0374999999999996, 'a_17': 3.8387499999999997, 'a_18': 3.0374999999999996}
 
 	predicted, error = model.complete()
-	print(predicted)
+	# predict ratings for all non-evaluated pairs considering all users and items 
+	# {'a_0': 1.789375, 'a_1': 1.589375, 'a_2': 2.391454950083955, 'a_4': 2.5843749999999996, 'a_5': 2.3582404453704133, ......}

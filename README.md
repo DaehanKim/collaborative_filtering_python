@@ -46,3 +46,7 @@ predicted, error = model.complete()
 # predict ratings for all non-evaluated pairs considering all users and items 
 # {'a_6': 1.8476923076923077, 'a_8': 1.8476923076923077, 'a_10': 1.8476923076923077, 'a_12': 1.8476923076923077, 'a_13': 1.8476923076923077, 'a_15': 1.8476923076923077, 'a_19': 1.8476923076923077, 'b_1': 3.211642392121491, 'b_2': 3.55875, 'b_6': 4.00375, 'b_7': 1.6737499999999998, 'b_10': 2.7856227678465375, 'b_11': 3.24875, 'b_12': 3.1574999999999998, 'b_13': 3.01875, 'b_14': 2.57375 ...}
 ```
+
+### Disclaimer
+
+Please use this implementation as a casual reference. For academic or industrial use, you might need to modify formulae as your work requires. 
